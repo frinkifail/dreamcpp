@@ -14,12 +14,50 @@
 #include <vector>
 
 struct AppConfig {
-    std::string name;
-    std::string version;
+    std::string name = "Dream++ Application";
+    std::string version = "1.0.0";
     std::vector<std::string> includes;
-    
-    AppConfig() : name("Dream++ Application"), version("1.0.0"), includes() {}
+    std::string standard = "c++20";
+    std::string preferred_compiler = "clang++";
 };
+
+template<typename Container>
+std::string join(const Container& container, const std::string& delimiter) {
+    std::string result;
+    for (const auto& item : container) {
+        result += delimiter + item;
+    }
+    return result;
+}
+
+struct ExecResult {
+    std::string output;
+    int exit_code;
+};
+
+ExecResult exec(const std::string& cmd) {
+    std::array<char, 128> buffer;
+    std::string result;
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) throw std::runtime_error("popen() failed!");
+
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+        result += buffer.data();
+    }
+
+    int status = pclose(pipe);
+    int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+
+    return {result, exit_code};
+}
+
+template<typename T>
+void maybe_assign(const toml::table& tbl, const std::string& key, T& target) {
+    if (auto val = tbl[key].value<T>()) {
+        target = *val;
+    }
+}
 
 std::optional<AppConfig> parse_config_file(const std::string& fp, const std::string& project_name) {
     AppConfig config;
@@ -27,13 +65,14 @@ std::optional<AppConfig> parse_config_file(const std::string& fp, const std::str
         toml::table tbl = toml::parse_file(fp);
         
         config.name = tbl["name"].value_or(project_name);
-        config.version = tbl["version"].value_or(config.version);
+        maybe_assign(tbl, "version", config.version);
+        maybe_assign(tbl, "standard", config.standard);
+        maybe_assign(tbl, "preferred_compiler", config.preferred_compiler);
 
-        if (auto include_paths = tbl["includes"].as_array()) {
-            for (auto& path : *include_paths) {
-                if (path.is_string()) {
-                    config.includes.push_back(*path.value<std::string>());
-                }
+        if (auto arr = tbl["includes"].as_array()) {
+            for (const auto& val : *arr) {
+                if (auto str = val.value<std::string>())
+                    config.includes.push_back(*str);
             }
         }
 
@@ -55,10 +94,13 @@ toml::table serialise_config(const AppConfig& config) {
     tbl.insert("version", config.version);
 
     toml::array include_paths;
-    for (std::string path : config.includes) {
+    for (const std::string& path : config.includes) {
         include_paths.push_back(path);
     }
     tbl.insert("includes", include_paths);
+
+    tbl.insert("standard", config.standard);
+    tbl.insert("preferred_compiler", config.preferred_compiler);
 
     return tbl;
 }
@@ -81,9 +123,13 @@ bool sync_config(const toml::table& tbl, const std::string& fp) {
 }
 
 int main(int argc, char **argv) {
+    #ifdef _WIN32
+    spdlog::error("Windows isn't supported (for now).");
+    exit(1);
+    #endif
     CLI::App app{"✨ DreamCPP"};
 
-    bool verbose = false;
+    auto verbose = false;
     app.add_flag("-v,--verbose", verbose, "Enable verbose output");
 
     std::string config_file_path = "dreamcpp.toml";
@@ -91,9 +137,11 @@ int main(int argc, char **argv) {
                    "Path to configuration file")
         ->check(CLI::ExistingFile);
     
-    CLI::App* new_cmd = app.add_subcommand("new", "Create a new ☁️++ project");
+    auto new_cmd = app.add_subcommand("new", "Create a new ☁️++ project");
     std::string project_name;
     new_cmd->add_option("project_name", project_name, "Name of the new project"); // implicitly required
+
+    auto build_cmd = app.add_subcommand("build", "Builds a 💭++ project");
 
     new_cmd->callback([&]() {
         spdlog::info("[🏗️] Creating new project '{}'", project_name);
@@ -102,6 +150,14 @@ int main(int argc, char **argv) {
                 spdlog::error("[🏗️] ❌ Something went wrong creating directories.");
                 exit(1);
             }
+
+            auto subdirs = {"src", "build"};
+            for (const auto& dir : subdirs) {
+                if (!std::filesystem::create_directory(std::filesystem::path(project_name) / dir)) {
+                    spdlog::warn("[🏗️] ⚠️ Something went wrong creating subdirectories.");
+                }
+            }
+
             AppConfig config;
             config.name = project_name;
             sync_config(serialise_config(config), std::format("{}/{}", project_name, config_file_path));
@@ -111,19 +167,29 @@ int main(int argc, char **argv) {
         }
     });
 
+    build_cmd->callback([&]() {
+        spdlog::info("[⚒️] Building this project...");
+        if (!std::filesystem::exists("dreamcpp.toml")) {
+            spdlog::error("[⚒️] ❌ This... isn't a 🌌++ project."); // im running out of dream emoji ideas help
+            exit(1);
+        }
+        auto app = parse_config_file("dreamcpp.toml", std::filesystem::current_path().filename().string());
+        if (!app.has_value())
+            exit(1);
+        // construct build commands
+        // NOTE: future do parallel
+        auto out = exec(std::format("{} src/*.cpp -o build/{} -std={}{}", app->preferred_compiler, app->name, app->standard, join(app->includes, " -I")));
+        if (out.exit_code != 0) {
+            spdlog::warn("[⚒️] ⚠️ Failed to compile.");
+            spdlog::warn("[⚒️] ⚠️ {}", out.output);
+        }
+    });
+
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
         return app.exit(e);
     }
-
-    // if (command == "build") {
-    //     if (auto cfg = parse_config_file(config_file_path, )) {
-
-    //     }
-    // } else {
-
-    // }
 
     return 0;
 }

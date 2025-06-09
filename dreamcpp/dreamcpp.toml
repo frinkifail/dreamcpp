@@ -1,0 +1,5 @@
+includes = ["src/lib"]
+name = 'dreamcpp'
+preferred_compiler = 'clang++'
+standard = 'c++20'
+version = '1.0.0'

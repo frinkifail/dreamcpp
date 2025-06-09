@@ -1,6 +1,6 @@
-includes = ["src/lib"]
+includes = []
 name = 'dreamcpp'
 preferred_compiler = 'clang++'
 standard = 'c++20'
 version = '1.0.0'
-dependencies = []
+dependencies = [{ name = "CLI" }, { name = "spdlog" }, { name = "toml++" }, { name = "curl" }]

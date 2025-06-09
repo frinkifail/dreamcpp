@@ -26,6 +26,7 @@ struct DepIndex {
     std::string git;
     std::vector<std::string> aliases;
     std::optional<std::string> branch;
+    bool header_only = false;
 };
 
 struct AppConfig {
@@ -173,6 +174,7 @@ parse_repository_index(const std::string &tomlstr) {
             if (auto vtbl = v.as_table()) {
                 DepIndex dep;
                 dep.git = (*vtbl)["git"].value_or("");
+                dep.header_only = (*vtbl)["header"].value_or(dep.header_only);
 
                 // Handle aliases safely
                 if (auto aliases_arr = (*vtbl)["aliases"].as_array()) {
@@ -281,7 +283,7 @@ std::optional<std::string> search_local_indexes(const std::string &dep_name) {
     return std::nullopt;
 }
 
-std::optional<std::string> search_remote_index(const std::string &dep_name) {
+std::optional<DepIndex> search_remote_index(const std::string &dep_name) {
     const std::string index_url =
         "https://raw.githubusercontent.com/frinkifail/dreamcpp/refs/heads/main/"
         "index/dcpp%3Acore.toml";
@@ -301,7 +303,7 @@ std::optional<std::string> search_remote_index(const std::string &dep_name) {
     // Direct lookup first
     auto dep = get_or_nullopt(index.value(), dep_name);
     if (dep.has_value()) {
-        return dep->git;
+        return dep;
     }
 
     // Search aliases
@@ -309,18 +311,18 @@ std::optional<std::string> search_remote_index(const std::string &dep_name) {
         auto it =
             std::find(value.aliases.begin(), value.aliases.end(), dep_name);
         if (it != value.aliases.end()) {
-            return value.git;
+            return value;
         }
     }
 
     return std::nullopt;
 }
 
-std::optional<std::string> resolve_dependency_url(const std::string &dep_name) {
+std::optional<DepIndex> resolve_dependency_url(const std::string &dep_name) {
     // Try local indexes first
-    if (auto local_result = search_local_indexes(dep_name)) {
-        return local_result;
-    }
+    // if (auto local_result = search_local_indexes(dep_name)) {
+    //     return local_result;
+    // }
 
     // Fall back to remote index
     if (auto remote_result = search_remote_index(dep_name)) {
@@ -396,21 +398,30 @@ bool clone_single_dependency(const std::string &dep_name) {
     }
 
     // Resolve the dependency URL dynamically
-    auto repo_url = resolve_dependency_url(dep_name);
-    if (!repo_url.has_value()) {
-        spdlog::error("[🚀] ❌ Failed to resolve dependency: {}", dep_name);
+    auto repo_index = resolve_dependency_url(dep_name);
+    if (!repo_index.has_value()) {
+        spdlog::warn("[🚀] ⚠️ Failed to resolve dependency: {}", dep_name);
         return false;
     }
 
     spdlog::info("[🚀] 📦 Cloning '{}'...", dep_name);
     std::string clone_cmd =
-        std::format("git clone {} {} 2>&1", repo_url.value(), dep_path);
+        std::format("git clone {} {} 2>&1", repo_index->git, dep_path);
 
     auto result = exec(clone_cmd);
     if (result.exit_code != 0) {
         spdlog::error("[🚀] ❌ Failed to clone dependency: {}", dep_name);
         spdlog::error("[🚀] ❌ Git output: {}", result.output);
         return false;
+    }
+
+    try {
+        std::filesystem::rename(
+            std::format("build/deps/{}/include/{}", dep_name, dep_name),
+            "build/includes"
+        );
+    } catch (const std::filesystem::filesystem_error& e) {
+        spdlog::warn("[🚀] ⚠️ Couldn't move header-only include for '{}': {}", dep_name, e.what());
     }
 
     spdlog::info("[🚀] ✅ Successfully cloned: {}", dep_name);
@@ -450,7 +461,7 @@ bool sync() {
     if (all_success) {
         spdlog::info("[🚀] ✅ All dependencies synced successfully");
     } else {
-        spdlog::error("[🚀] ❌ Some dependencies failed to sync");
+        spdlog::warn("[🚀] ⚠️ Some dependencies failed to sync");
     }
 
     return all_success;

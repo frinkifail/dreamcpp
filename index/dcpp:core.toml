@@ -1,3 +1,3 @@
-"toml++" = { git = "https://github.com/marzer/tomlplusplus.git", aliases = ["tomlplusplus"] }
-spdlog = { git = "https://github.com/gabime/spdlog.git" }
-CLI11 = { git = "https://github.com/CLIUtils/CLI11.git", aliases = ["CLI"] }
+"toml++" = { git = "https://github.com/marzer/tomlplusplus.git", aliases = ["tomlplusplus"], header = true }
+spdlog = { git = "https://github.com/gabime/spdlog.git", header = true }
+CLI11 = { git = "https://github.com/CLIUtils/CLI11.git", aliases = ["CLI"], header = true }

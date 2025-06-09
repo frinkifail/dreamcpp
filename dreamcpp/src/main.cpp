@@ -13,12 +13,19 @@
 #include <string>
 #include <vector>
 
+struct Dependency {
+    std::string name;
+    std::string version;
+    std::string git;
+};
+
 struct AppConfig {
     std::string name = "Dream++ Application";
     std::string version = "1.0.0";
-    std::vector<std::string> includes;
+    std::vector<std::string> includes = {};
     std::string standard = "c++20";
     std::string preferred_compiler = "clang++";
+    std::vector<Dependency> deps = {};
 };
 
 template<typename Container>
@@ -68,11 +75,24 @@ std::optional<AppConfig> parse_config_file(const std::string& fp, const std::str
         maybe_assign(tbl, "version", config.version);
         maybe_assign(tbl, "standard", config.standard);
         maybe_assign(tbl, "preferred_compiler", config.preferred_compiler);
+        maybe_assign(tbl, "includes", config.includes);
+        // maybe_assign(tbl, "dependencies", config.deps);
 
         if (auto arr = tbl["includes"].as_array()) {
             for (const auto& val : *arr) {
                 if (auto str = val.value<std::string>())
                     config.includes.push_back(*str);
+            }
+        }
+        if (auto arr = tbl["dependencies"].as_array()) {
+            for (const auto& val : *arr) {
+                if (auto tbldep = val.as_table()) {
+                    Dependency dep;
+                    dep.name = (*tbldep)["name"].value_or("ignored");
+                    dep.version = (*tbldep)["version"].value_or("0.0.0");
+                    dep.git = (*tbldep)["git"].value_or("ignored");
+                    config.deps.push_back(dep);
+                }
             }
         }
 
@@ -98,6 +118,16 @@ toml::table serialise_config(const AppConfig& config) {
         include_paths.push_back(path);
     }
     tbl.insert("includes", include_paths);
+
+    toml::array deps;
+    for (const auto& dep : config.deps) {
+        toml::table tbldep;
+        tbldep.insert("name", dep.name);
+        tbldep.insert("version", dep.version);
+        tbldep.insert("git", dep.git);
+        deps.push_back(tbldep);
+    }
+    tbl.insert("dependencies", deps);
 
     tbl.insert("standard", config.standard);
     tbl.insert("preferred_compiler", config.preferred_compiler);
@@ -142,6 +172,10 @@ int main(int argc, char **argv) {
     new_cmd->add_option("project_name", project_name, "Name of the new project"); // implicitly required
 
     auto build_cmd = app.add_subcommand("build", "Builds a 💭++ project");
+    
+    auto add_cmd = app.add_subcommand("add", "Adds a new dependency to a 🌧️++ project");
+    std::string dep_name;
+    add_cmd->add_option("dep_name", dep_name, "The name of the dependency.");
 
     new_cmd->callback([&]() {
         spdlog::info("[🏗️] Creating new project '{}'", project_name);

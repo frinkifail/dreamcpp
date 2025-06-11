@@ -19,7 +19,7 @@
 struct Dependency {
     std::string name;
     std::string version = "latest"; // Default version
-    // Remove git field - it should be resolved dynamically
+    bool system = false; // Is it a system library? (linked using -l<dep>)
 };
 
 struct DepIndex {
@@ -145,7 +145,7 @@ std::optional<AppConfig> parse_config_file(const std::string &fp,
                     Dependency dep;
                     dep.name = (*tbldep)["name"].value_or("unknown");
                     dep.version = (*tbldep)["version"].value_or("latest");
-                    // Don't parse git field - it's resolved dynamically
+                    dep.system = (*tbldep)["system"].value_or(false);
                     if (!dep.name.empty() && dep.name != "unknown") {
                         config.deps.push_back(dep);
                     }
@@ -453,6 +453,10 @@ bool sync() {
     // Sequential cloning (TODO: could be parallelized with std::async)
     bool all_success = true;
     for (const auto &dep : app->deps) {
+        if (dep.system) {
+            spdlog::info("[🚀] Skipping '{}', is a system library.", dep.name);
+            continue;
+        }
         if (!clone_single_dependency(dep.name)) {
             all_success = false;
         }
@@ -483,7 +487,7 @@ int main(int argc, char **argv) {
                    "Path to configuration file")
         ->check(CLI::ExistingFile);
 
-    auto new_cmd = app.add_subcommand("new", "Create a new ☁️++ project");
+    auto new_cmd = app.add_subcommand("new", "Create a new 🛌++ project");
     std::string project_name;
     new_cmd->add_option("project_name", project_name, "Name of the new project")
         ->required();

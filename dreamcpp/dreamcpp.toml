@@ -3,4 +3,4 @@ name = 'dreamcpp'
 preferred_compiler = 'clang++'
 standard = 'c++20'
 version = '1.0.0'
-dependencies = [{ name = "CLI" }, { name = "spdlog" }, { name = "toml++" }, { name = "curl" }]
+dependencies = [{ name = "CLI" }, { name = "spdlog" }, { name = "toml++" }, { name = "curl", system = true }]

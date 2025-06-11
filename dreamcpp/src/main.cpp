@@ -415,13 +415,16 @@ bool clone_single_dependency(const std::string &dep_name) {
         return false;
     }
 
-    try {
-        std::filesystem::rename(
-            std::format("build/deps/{}/include/{}", dep_name, dep_name),
-            "build/includes"
-        );
-    } catch (const std::filesystem::filesystem_error& e) {
-        spdlog::warn("[🚀] ⚠️ Couldn't move header-only include for '{}': {}", dep_name, e.what());
+    if (repo_index->header_only) {
+        try {
+            std::filesystem::create_directory(std::format("build/includes/{}", dep_name));
+            std::filesystem::rename(
+                std::format("build/deps/{}/include/{}", dep_name, dep_name),
+                std::format("build/includes/{}", dep_name)
+            );
+        } catch (const std::filesystem::filesystem_error& e) {
+            spdlog::warn("[🚀] ⚠️ Couldn't move header-only include for '{}': {}", dep_name, e.what());
+        }
     }
 
     spdlog::info("[🚀] ✅ Successfully cloned: {}", dep_name);

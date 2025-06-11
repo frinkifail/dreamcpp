@@ -453,6 +453,9 @@ bool sync() {
     // Create deps directory if it doesn't exist
     std::filesystem::create_directories("build/deps");
 
+    // Create includes directory if it doesn't exist
+    std::filesystem::create_directories("build/includes");
+
     // Sequential cloning (TODO: could be parallelized with std::async)
     bool all_success = true;
     for (const auto &dep : app->deps) {
@@ -566,8 +569,7 @@ int main(int argc, char **argv) {
         std::vector<std::string> link_syslibs;
         for (const auto &dep : app_config->deps) {
             // spdlog::info("Name: {}", dep.name);
-            if (!std::filesystem::exists(
-                    std::format("build/includes/{}", dep.name))) {
+            if (dep.system) {
                 link_syslibs.push_back(dep.name);
             }
         }

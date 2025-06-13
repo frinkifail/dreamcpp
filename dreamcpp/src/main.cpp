@@ -478,6 +478,60 @@ bool sync() {
 }
 } // namespace dependency
 
+void build() {
+    spdlog::info("[⚒️] Building this project...");
+    if (!std::filesystem::exists("dreamcpp.toml")) {
+        spdlog::error("[⚒️] ❌ This... isn't a 🌌++ project.");
+        exit(1);
+    }
+    auto app_config = parse_config_file(
+        "dreamcpp.toml",
+        std::filesystem::current_path().filename().string());
+    if (!app_config.has_value())
+        exit(1);
+
+    // Check if src directory exists and has files
+    if (!std::filesystem::exists("src")) {
+        spdlog::error("[⚒️] ❌ No src directory found");
+        exit(1);
+    }
+
+    // construct build commands
+    std::string include_flags = join(app_config->includes, " -I");
+    if (!include_flags.empty()) {
+        include_flags = " -I" + include_flags;
+    }
+
+    std::vector<std::string> link_syslibs;
+    for (const auto &dep : app_config->deps) {
+        // spdlog::info("Name: {}", dep.name);
+        if (dep.system) {
+            link_syslibs.push_back(dep.name);
+        }
+    }
+
+    std::string link_flags = join(link_syslibs, " -l");
+    // if (!link_flags.empty()) {
+    //     link_flags = " -l" + link_flags;
+    // }
+
+    auto build_cmd = std::format(
+        "{} src/*.cpp -o build/{} -std={} -Ibuild/includes -Lbuild/lib{}{}",
+        app_config->preferred_compiler, app_config->name,
+        app_config->standard, include_flags, link_flags);
+
+    spdlog::info("[⚒️] Running: {}", build_cmd);
+    auto out = exec(build_cmd);
+
+    if (out.exit_code != 0) {
+        spdlog::error("[⚒️] ❌ Failed to compile.");
+        spdlog::error("[⚒️] ❌ {}", out.output);
+        exit(1);
+    } else {
+        spdlog::info("[⚒️] ✅ Build successful!");
+    }
+}
+
 int main(int argc, char **argv) {
 #ifdef _WIN32
     spdlog::error("Windows isn't supported (for now).");
@@ -499,6 +553,7 @@ int main(int argc, char **argv) {
         ->required();
 
     auto build_cmd = app.add_subcommand("build", "Builds a 💭++ project");
+    auto run_cmd = app.add_subcommand("run", "Runs a 💤++ project");
 
     auto add_cmd =
         app.add_subcommand("add", "Adds a new dependency to a 🌧️++ project");
@@ -543,7 +598,11 @@ int main(int argc, char **argv) {
     });
 
     build_cmd->callback([&]() {
-        spdlog::info("[⚒️] Building this project...");
+        build();
+    });
+
+    run_cmd->callback([&]() {
+        build();
         if (!std::filesystem::exists("dreamcpp.toml")) {
             spdlog::error("[⚒️] ❌ This... isn't a 🌌++ project.");
             exit(1);
@@ -553,47 +612,9 @@ int main(int argc, char **argv) {
             std::filesystem::current_path().filename().string());
         if (!app_config.has_value())
             exit(1);
-
-        // Check if src directory exists and has files
-        if (!std::filesystem::exists("src")) {
-            spdlog::error("[⚒️] ❌ No src directory found");
-            exit(1);
-        }
-
-        // construct build commands
-        std::string include_flags = join(app_config->includes, " -I");
-        if (!include_flags.empty()) {
-            include_flags = " -I" + include_flags;
-        }
-
-        std::vector<std::string> link_syslibs;
-        for (const auto &dep : app_config->deps) {
-            // spdlog::info("Name: {}", dep.name);
-            if (dep.system) {
-                link_syslibs.push_back(dep.name);
-            }
-        }
-
-        std::string link_flags = join(link_syslibs, " -l");
-        // if (!link_flags.empty()) {
-        //     link_flags = " -l" + link_flags;
-        // }
-
-        auto build_cmd = std::format(
-            "{} src/*.cpp -o build/{} -std={} -Ibuild/includes -Lbuild/lib{}{}",
-            app_config->preferred_compiler, app_config->name,
-            app_config->standard, include_flags, link_flags);
-
-        spdlog::info("[⚒️] Running: {}", build_cmd);
-        auto out = exec(build_cmd);
-
-        if (out.exit_code != 0) {
-            spdlog::error("[⚒️] ❌ Failed to compile.");
-            spdlog::error("[⚒️] ❌ {}", out.output);
-            exit(1);
-        } else {
-            spdlog::info("[⚒️] ✅ Build successful!");
-        }
+        auto runcmd = std::format("build/{}", app_config->name);
+        spdlog::info("[⚒️] Running: {}", runcmd);
+        system(runcmd.c_str());
     });
 
     add_cmd->callback([&]() {

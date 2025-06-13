@@ -1,0 +1,6 @@
+dependencies = []
+includes = []
+name = 'hello-world'
+preferred_compiler = 'clang++'
+standard = 'c++20'
+version = '1.0.0'
